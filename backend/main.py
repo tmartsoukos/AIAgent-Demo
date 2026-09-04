@@ -8,7 +8,9 @@ from google.genai import errors as genai_errors
 from google.genai import types
 from pydantic import BaseModel
 
-# Φόρτωση του GEMINI_API_KEY από το backend/.env
+from db import embed_text, get_connection
+
+# Φόρτωση του GEMINI_API_KEY / DATABASE_URL από το backend/.env
 load_dotenv()
 
 MODEL = "gemini-3.6-flash"
@@ -36,41 +38,44 @@ def get_client():
 
 
 # --------------------------------------------------------------------------
-# Mock functions
+# Functions
 # --------------------------------------------------------------------------
-
-# Ψεύτικη "βάση" εγγράφων. Σε επόμενο βήμα θα αντικατασταθεί από
-# πραγματικό RAG πάνω σε PostgreSQL + pgvector.
-FAKE_DOCS = [
-    {
-        "title": "Αρχιτεκτονική του agent",
-        "content": (
-            "Ο agent τρέχει σε FastAPI backend και καλεί το Gemini API με function calling. "
-            "Κάθε function call εκτελείται τοπικά και το αποτέλεσμα επιστρέφει στο μοντέλο."
-        ),
-    },
-    {
-        "title": "RAG με pgvector",
-        "content": (
-            "Τα έγγραφα τεμαχίζονται σε chunks, μετατρέπονται σε embeddings και "
-            "αποθηκεύονται σε PostgreSQL με την επέκταση pgvector για αναζήτηση ομοιότητας."
-        ),
-    },
-    {
-        "title": "Deployment στο AWS",
-        "content": (
-            "Το backend θα τρέξει σε container, η βάση σε managed PostgreSQL, "
-            "και το frontend θα σερβίρεται ξεχωριστά."
-        ),
-    },
-]
 
 
 def search_docs(query: str) -> str:
-    """Ψεύτικη αναζήτηση: επιστρέφει hardcoded αποτελέσματα μαζί με το query."""
+    """Semantic search πάνω στον πίνακα documents μέσω pgvector.
+
+    Το query γίνεται embedding με task_type RETRIEVAL_QUERY (ασύμμετρο με το
+    RETRIEVAL_DOCUMENT που χρησιμοποιεί το ingest.py) και συγκρίνεται με τα
+    αποθηκευμένα embeddings μέσω cosine distance (<=>). Μικρότερη απόσταση
+    σημαίνει μεγαλύτερη σημασιολογική ομοιότητα, γι' αυτό η ταξινόμηση είναι
+    ascending και κρατάμε μόνο τα 3 πιο κοντινά.
+    """
+    query_embedding = embed_text(get_client(), query, task_type="RETRIEVAL_QUERY")
+
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT title, content
+            FROM documents
+            ORDER BY embedding <=> %s::vector
+            LIMIT 3
+            """,
+            (query_embedding,),
+        )
+        rows = cur.fetchall()
+        cur.close()
+    finally:
+        conn.close()
+
+    if not rows:
+        return "Δεν βρέθηκαν σχετικά έγγραφα."
+
     lines = [f'Αποτελέσματα αναζήτησης για "{query}":']
-    for i, doc in enumerate(FAKE_DOCS, start=1):
-        lines.append(f"{i}. {doc['title']}: {doc['content']}")
+    for i, (title, content) in enumerate(rows, start=1):
+        lines.append(f"{i}. {title}: {content}")
     return "\n".join(lines)
 
 
