@@ -3,6 +3,7 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
@@ -18,6 +19,15 @@ MODEL = "gemini-3.6-flash"
 MAX_ITERATIONS = 10
 
 app = FastAPI(title="AI Agent RAG API")
+
+# Ο browser μπλοκάρει requests προς άλλο origin (εδώ: frontend στο :3000 προς
+# backend στο :8000) εκτός αν ο server δηλώσει ρητά ότι τα επιτρέπει.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Ο client φτιάχνεται με το πρώτο αίτημα, ώστε ο server να ξεκινάει
 # κανονικά (και το /health να δουλεύει) ακόμα κι αν λείπει το κλειδί.
