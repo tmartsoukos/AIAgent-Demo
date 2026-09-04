@@ -10,6 +10,41 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    # Το depends_on από μόνο του περιμένει μόνο να ξεκινήσει ο container, όχι
+    # να είναι έτοιμη η βάση — το healthcheck καλύπτει τη διαφορά.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ragdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - backend/.env
+    environment:
+      # Υπερισχύει του DATABASE_URL του .env: μέσα στο compose network η βάση
+      # είναι στο hostname "db", ενώ το localhost θα ήταν ο ίδιος ο container.
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/ragdb
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Ψήνεται στο client bundle κατά το build. Είναι η διεύθυνση που θα
+        # καλέσει ο browser του χρήστη, όχι κάποιο εσωτερικό service name.
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
 
 volumes:
   pgdata:
