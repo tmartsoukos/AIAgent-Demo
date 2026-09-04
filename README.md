@@ -11,6 +11,23 @@ Next.js (chat UI), ενώ ο τελικός στόχος είναι το deploym
 ### Προϋποθέσεις
 
 - Python 3.11+ (δοκιμασμένο με 3.13.2)
+- Docker Desktop (για τη βάση δεδομένων)
+
+### Βάση δεδομένων
+
+Από τη ρίζα του project, εκκίνηση της PostgreSQL με το pgvector extension:
+
+```bash
+docker compose up -d
+```
+
+Σηκώνει έναν container στο port 5432 με βάση `ragdb`. Τα δεδομένα αποθηκεύονται
+σε named volume (`pgdata`), οπότε επιβιώνουν σε restart του container. Έλεγχος
+ότι τρέχει:
+
+```bash
+docker compose ps
+```
 
 ### Backend
 
@@ -48,8 +65,19 @@ Next.js (chat UI), ενώ ο τελικός στόχος είναι το deploym
    ```
 
    Το `.env` αγνοείται από το git και δεν ανεβαίνει ποτέ στο repository.
+   Το `DATABASE_URL` του template δείχνει ήδη στη βάση του `docker-compose.yml`.
 
-5. Εκκίνηση του server:
+5. Φόρτωση των sample εγγράφων στη βάση (δημιουργεί το extension `vector`,
+   τον πίνακα `documents`, και αποθηκεύει τα embeddings):
+
+   ```bash
+   python ingest.py
+   ```
+
+   Χρειάζεται μία φορά, αφού η βάση είναι σε λειτουργία. Χωρίς αυτό το βήμα
+   το `search_docs` δεν έχει τίποτα να ανακτήσει.
+
+6. Εκκίνηση του server:
 
    ```bash
    uvicorn main:app --reload
@@ -80,6 +108,15 @@ curl -X POST http://127.0.0.1:8000/chat -H "Content-Type: application/json" -d "
 ```json
 {"reply": "...", "function_calls": [{"name": "get_current_time", "args": {}}]}
 ```
+
+Ερώτηση που ενεργοποιεί το RAG (semantic search πάνω στα ingested κείμενα):
+
+```bash
+curl -X POST http://127.0.0.1:8000/chat -H "Content-Type: application/json" -d "{\"message\": \"Τι είναι το cosine similarity;\"}"
+```
+
+Εδώ το `function_calls` δείχνει την κλήση του `search_docs`, και η απάντηση
+χτίζεται πάνω στα 3 πιο σχετικά έγγραφα που ανακτήθηκαν από τη βάση.
 
 ### Frontend
 
