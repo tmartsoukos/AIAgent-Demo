@@ -3,14 +3,16 @@
 Demo project ενός AI agent που συνδυάζει function calling πάνω στο Google Gemini API με RAG (Retrieval-Augmented
 Generation) πάνω σε PostgreSQL με την επέκταση pgvector. Το backend υλοποιείται σε FastAPI και το frontend σε
 Next.js (chat UI), ενώ ο τελικός στόχος είναι το deployment ολόκληρου του συστήματος στο AWS. Το repository
-χτίζεται σταδιακά: σε αυτό το στάδιο το backend έχει ένα health endpoint και έναν agent με δύο mock functions
-(`search_docs`, `get_current_time`) πίσω από το `/chat`.
+χτίζεται σταδιακά: σε αυτό το στάδιο ο agent εκτίθεται στο `/chat` με δύο functions — `search_docs`, που κάνει
+πραγματικό semantic search στη βάση, και `get_current_time` — και υπάρχει chat UI που δείχνει ποια εργαλεία
+χρησιμοποίησε ο agent σε κάθε απάντηση. Εκκρεμεί το deployment στο AWS.
 
 ## Setup
 
 ### Προϋποθέσεις
 
 - Python 3.11+ (δοκιμασμένο με 3.13.2)
+- Node.js 20+ (δοκιμασμένο με 22.14.0), για το frontend
 - Docker Desktop (για τη βάση δεδομένων)
 
 ### Βάση δεδομένων
@@ -120,4 +122,35 @@ curl -X POST http://127.0.0.1:8000/chat -H "Content-Type: application/json" -d "
 
 ### Frontend
 
-Δεν έχει στηθεί ακόμα — θα προστεθεί σε επόμενο βήμα.
+Next.js 16 (App Router, TypeScript, Tailwind). Από τον φάκελο `frontend/`, με
+το backend ήδη σε λειτουργία:
+
+1. Εγκατάσταση εξαρτήσεων:
+
+   ```bash
+   npm install
+   ```
+
+2. Αντιγραφή του template μεταβλητών περιβάλλοντος:
+
+   ```bash
+   cp .env.local.example .env.local
+   ```
+
+   Το `NEXT_PUBLIC_API_URL` δείχνει στο backend· αλλάζοντάς το εκεί δείχνει σε
+   άλλο περιβάλλον χωρίς αλλαγή κώδικα.
+
+3. Εκκίνηση:
+
+   ```bash
+   npm run dev
+   ```
+
+Το UI ανοίγει στο <http://localhost:3000>. Γράφοντας ένα μήνυμα και πατώντας
+Enter (ή «Send»), εμφανίζεται η απάντηση του agent και, από κάτω, ένα
+collapsible μπλοκ με τα function calls που έγιναν — π.χ.
+`🔧 1 function call` → `search_docs {"query": "cosine similarity"}`.
+
+Το backend επιτρέπει CORS μόνο για το `http://localhost:3000`. Αν το frontend
+τρέξει σε άλλο origin, πρέπει να προστεθεί στο `allow_origins` στο
+`backend/main.py`, αλλιώς ο browser μπλοκάρει τις απαντήσεις.
