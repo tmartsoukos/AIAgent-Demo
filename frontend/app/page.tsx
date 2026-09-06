@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -98,13 +100,23 @@ export default function Home() {
                   : "max-w-[90%]"
               }
             >
-              <div
-                className={`whitespace-pre-wrap text-sm leading-relaxed ${
-                  message.isError ? "text-red-600 dark:text-red-400" : ""
-                }`}
-              >
-                {message.text}
-              </div>
+              {message.role === "agent" && !message.isError ? (
+                // Ο agent απαντά σε markdown· χωρίς render θα φαίνονταν τα
+                // ** και ## ως σκέτο κείμενο.
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {message.text}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <div
+                  className={`whitespace-pre-wrap text-sm leading-relaxed ${
+                    message.isError ? "text-red-600 dark:text-red-400" : ""
+                  }`}
+                >
+                  {message.text}
+                </div>
+              )}
 
               {message.functionCalls && message.functionCalls.length > 0 && (
                 <details className="mt-2 rounded-lg border border-black/10 bg-black/[0.03] px-3 py-2 dark:border-white/15 dark:bg-white/5">

@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Δίνει τις κλάσεις prose-*, για styling του rendered markdown */
+@plugin "@tailwindcss/typography";
 
 :root {
   --background: #ffffff;
