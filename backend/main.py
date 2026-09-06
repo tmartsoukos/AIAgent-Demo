@@ -66,7 +66,10 @@ def get_client():
 # Δύο ανεξάρτητα όρια: ανά IP (σταματά έναν κακόβουλο πελάτη) και καθολικό
 # ημερήσιο (προστατεύει το quota ακόμα κι αν τα αιτήματα έρθουν από πολλές IP).
 REQUESTS_PER_MINUTE = int(os.getenv("REQUESTS_PER_MINUTE", "10"))
-REQUESTS_PER_DAY = int(os.getenv("REQUESTS_PER_DAY", "300"))
+# Το free tier του Gemini δίνει ~20 κλήσεις/ημέρα ανά μοντέλο. Το δικό μας
+# όριο μένει λίγο κάτω, ώστε να πιάνεται εδώ και ο χρήστης να παίρνει καθαρό
+# μήνυμα, αντί για το raw σφάλμα της Google. Με billing, ανέβασέ το.
+REQUESTS_PER_DAY = int(os.getenv("REQUESTS_PER_DAY", "15"))
 
 # Κρατιούνται στη μνήμη: μηδενίζονται σε restart και δεν μοιράζονται ανάμεσα
 # σε πολλαπλά instances. Επαρκές για ένα demo με έναν container.
@@ -256,6 +259,14 @@ def chat(request: ChatRequest, http_request: Request):
                 config=config,
             )
         except genai_errors.APIError as error:
+            # Το 429 του Gemini σημαίνει εξάντληση του quota του μοντέλου. Ο
+            # χρήστης δεν έχει λόγο να δει το raw JSON της Google — δίνουμε
+            # καθαρό μήνυμα (και το ίδιο 429 προς τα έξω).
+            if getattr(error, "code", None) == 429:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Το demo έφτασε το ημερήσιο όριο κλήσεων προς το μοντέλο. Δοκίμασε ξανά αύριο.",
+                )
             raise HTTPException(status_code=502, detail=str(error))
 
         calls = response.function_calls
