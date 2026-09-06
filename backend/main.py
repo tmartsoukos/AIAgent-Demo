@@ -1,8 +1,11 @@
 import os
-from datetime import datetime
+import threading
+from collections import deque
+from datetime import date, datetime
+from time import monotonic
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from google import genai
 from google.genai import errors as genai_errors
@@ -53,6 +56,68 @@ def get_client():
             )
         _client = genai.Client(api_key=api_key)
     return _client
+
+
+# --------------------------------------------------------------------------
+# Rate limiting
+# --------------------------------------------------------------------------
+
+# Το /chat είναι εκτεθειμένο στο internet και κάθε κλήση ξοδεύει Gemini quota.
+# Δύο ανεξάρτητα όρια: ανά IP (σταματά έναν κακόβουλο πελάτη) και καθολικό
+# ημερήσιο (προστατεύει το quota ακόμα κι αν τα αιτήματα έρθουν από πολλές IP).
+REQUESTS_PER_MINUTE = int(os.getenv("REQUESTS_PER_MINUTE", "10"))
+REQUESTS_PER_DAY = int(os.getenv("REQUESTS_PER_DAY", "300"))
+
+# Κρατιούνται στη μνήμη: μηδενίζονται σε restart και δεν μοιράζονται ανάμεσα
+# σε πολλαπλά instances. Επαρκές για ένα demo με έναν container.
+_rate_lock = threading.Lock()
+_hits_by_ip: dict[str, deque] = {}
+_daily = {"day": None, "count": 0}
+
+
+def client_ip(request: Request) -> str:
+    """Η IP του χρήστη, λαμβάνοντας υπόψη τυχόν reverse proxy μπροστά."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        # Μορφή "client, proxy1, proxy2" — ο πελάτης είναι ο πρώτος.
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def enforce_rate_limit(request: Request) -> None:
+    ip = client_ip(request)
+    now = monotonic()
+
+    with _rate_lock:
+        today = date.today()
+        if _daily["day"] != today:
+            _daily["day"] = today
+            _daily["count"] = 0
+
+        if _daily["count"] >= REQUESTS_PER_DAY:
+            raise HTTPException(
+                status_code=429,
+                detail="Το ημερήσιο όριο αιτημάτων εξαντλήθηκε. Δοκίμασε αύριο.",
+            )
+
+        hits = _hits_by_ip.setdefault(ip, deque())
+        while hits and now - hits[0] > 60:
+            hits.popleft()
+
+        if len(hits) >= REQUESTS_PER_MINUTE:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Πολλά αιτήματα. Το όριο είναι {REQUESTS_PER_MINUTE} ανά λεπτό.",
+            )
+
+        hits.append(now)
+        _daily["count"] += 1
+
+        # Καθάρισμα IP χωρίς πρόσφατα αιτήματα, ώστε το dict να μη μεγαλώνει
+        # απεριόριστα αν το endpoint δεχτεί κίνηση από πολλές διευθύνσεις.
+        if len(_hits_by_ip) > 1000:
+            for stale in [k for k, v in _hits_by_ip.items() if not v]:
+                del _hits_by_ip[stale]
 
 
 # --------------------------------------------------------------------------
@@ -170,7 +235,9 @@ def health():
 
 
 @app.post("/chat")
-def chat(request: ChatRequest):
+def chat(request: ChatRequest, http_request: Request):
+    enforce_rate_limit(http_request)
+
     contents = [
         types.Content(role="user", parts=[types.Part(text=request.message)])
     ]
