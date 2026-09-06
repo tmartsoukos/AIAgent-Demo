@@ -1,0 +1,2 @@
+# Τα shell scripts τρέχουν σε Linux — πάντα LF, ποτέ CRLF.
+*.sh text eol=lf

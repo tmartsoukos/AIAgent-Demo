@@ -21,10 +21,18 @@ MAX_ITERATIONS = 10
 app = FastAPI(title="AI Agent RAG API")
 
 # Ο browser μπλοκάρει requests προς άλλο origin (εδώ: frontend στο :3000 προς
-# backend στο :8000) εκτός αν ο server δηλώσει ρητά ότι τα επιτρέπει.
+# backend στο :8000) εκτός αν ο server δηλώσει ρητά ότι τα επιτρέπει. Στο
+# deployment το origin είναι η public διεύθυνση του server, όχι το localhost,
+# γι' αυτό η λίστα έρχεται από μεταβλητή περιβάλλοντος (χωρισμένη με κόμματα).
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
