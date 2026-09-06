@@ -51,5 +51,27 @@ services:
     depends_on:
       - backend
 
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Εδώ αποθηκεύονται τα πιστοποιητικά — χωρίς persistent volume το Caddy
+      # θα ζητούσε καινούριο σε κάθε restart και θα χτυπούσε τα όρια της Let's Encrypt.
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      # Χωρίς τιμή: σκέτο HTTP στο :80, χρήσιμο τοπικά.
+      # Με domain: αυτόματο HTTPS από Let's Encrypt.
+      DOMAIN: ${DOMAIN:-:80}
+    depends_on:
+      - frontend
+      - backend
+
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:

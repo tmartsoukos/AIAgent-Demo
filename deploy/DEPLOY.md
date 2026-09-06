@@ -237,6 +237,85 @@ docker compose up -d --build
 
 ---
 
+## 9. HTTPS με δωρεάν domain (DuckDNS)
+
+Το Let's Encrypt δεν εκδίδει πιστοποιητικά για σκέτη IP, οπότε χρειάζεται όνομα.
+
+### 9α. Elastic IP
+
+Πρώτα σταθεροποίησε τη διεύθυνση, αλλιώς το DNS θα δείχνει σε λάθος μέρος μετά
+από κάθε stop/start: **EC2 Console → Elastic IPs → Allocate → Associate** στο
+instance. Είναι δωρεάν όσο παραμένει συνδεδεμένη.
+
+### 9β. DuckDNS
+
+1. Σύνδεση στο <https://www.duckdns.org> (με Google/GitHub λογαριασμό)
+2. Δημιουργία υποτομέα, π.χ. `themis-agent` → δίνει `themis-agent.duckdns.org`
+3. Στο πεδίο **current ip** βάλε την Elastic IP και πάτα **update ip**
+
+Επαλήθευση ότι διαδόθηκε το DNS (από τον υπολογιστή σου):
+
+```bash
+nslookup themis-agent.duckdns.org
+```
+
+Πρέπει να επιστρέψει την Elastic IP. Αν όχι, περίμενε ένα-δυο λεπτά.
+
+### 9γ. Θύρες
+
+Στο Security Group:
+
+| Θύρα | Ενέργεια |
+| ---- | -------- |
+| 80   | **άνοιξε** — το Let's Encrypt το χρειάζεται για την επαλήθευση |
+| 443  | **άνοιξε** — η κανονική κίνηση HTTPS |
+| 22   | μένει ανοιχτό |
+| 3000, 8000 | **κλείσε** — πλέον περνούν όλα από το Caddy |
+
+### 9δ. Ρύθμιση και εκκίνηση
+
+Μέσα στο instance, ενημέρωσε το `~/AIAgent/.env`. Το `NEXT_PUBLIC_API_URL`
+δείχνει πλέον στο `/api` του ίδιου domain — same-origin, οπότε το CORS παύει
+να ενεργοποιείται:
+
+```bash
+cat > ~/AIAgent/.env <<'EOF'
+DOMAIN=themis-agent.duckdns.org
+NEXT_PUBLIC_API_URL=https://themis-agent.duckdns.org/api
+CORS_ORIGINS=https://themis-agent.duckdns.org
+EOF
+```
+
+Το frontend πρέπει να ξαναχτιστεί, γιατί η νέα διεύθυνση ενσωματώνεται στο
+bundle:
+
+```bash
+cd ~/AIAgent && git pull && docker compose stop frontend && docker compose up -d --build
+```
+
+### 9ε. Επαλήθευση
+
+Το Caddy εκδίδει το πιστοποιητικό στο πρώτο αίτημα — δώσε του λίγα
+δευτερόλεπτα και δες τα logs:
+
+```bash
+docker compose logs caddy --tail 30
+```
+
+Ψάξε για `certificate obtained successfully`. Μετά, από τον υπολογιστή σου:
+
+```bash
+curl https://themis-agent.duckdns.org/api/health
+```
+
+Και στον browser: `https://themis-agent.duckdns.org` — με λουκέτο, χωρίς
+προειδοποίηση «Not secure».
+
+> Αν το Caddy δεν καταφέρνει να πάρει πιστοποιητικό, σχεδόν πάντα φταίει ότι
+> η θύρα 80 είναι κλειστή ή ότι το DNS δεν δείχνει ακόμα στη σωστή IP.
+
+---
+
 ## Χρήσιμες εντολές
 
 | Σκοπός                     | Εντολή                                  |

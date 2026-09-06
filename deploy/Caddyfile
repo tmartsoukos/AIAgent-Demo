@@ -1,0 +1,21 @@
+# Reverse proxy μπροστά από frontend και backend.
+#
+# Το {$DOMAIN} έρχεται από μεταβλητή περιβάλλοντος:
+#   - στο deployment: το duckdns όνομα, π.χ. themis-agent.duckdns.org
+#     Το Caddy τότε εκδίδει και ανανεώνει μόνο του πιστοποιητικό Let's Encrypt.
+#   - τοπικά: ":80" — απλό HTTP χωρίς πιστοποιητικό.
+
+{$DOMAIN} {
+	# Ό,τι ξεκινά με /api πάει στο backend, ΧΩΡΙΣ το πρόθεμα:
+	# /api/chat -> /chat. Το handle_path κόβει το πρόθεμα, το handle δεν θα το έκοβε.
+	handle_path /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# Όλα τα υπόλοιπα στο frontend.
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	encode gzip
+}
