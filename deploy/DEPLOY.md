@@ -63,7 +63,7 @@ chmod +x ~/setup.sh
 ```
 
 ```bash
-~/setup.sh https://github.com/<user>/<repo>.git
+~/setup.sh https://github.com/tmartsoukos/AIAgent-Demo.git
 ```
 
 Το script ενημερώνει το σύστημα, εγκαθιστά Docker με το compose plugin και
